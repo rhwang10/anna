@@ -1,5 +1,5 @@
 # Anna
-Anna is the message events consumer for Elsa bot hosted on AWS Lambda - it consumes Discord messages from the HTV channel SQS and indexes them into an Elasticsearch database.
+Anna is the message events consumer for Elsa bot hosted on AWS Lambda - it consumes Discord messages from the HTV channel SQS and indexes them into a Dynamo database.
 
 # Setup
 Pull the repository

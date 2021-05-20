@@ -95,4 +95,4 @@ def lambda_handler(event, context):
     }
 
 def key(id, name):
-    return id + "|" + name if name else id
+    return str(id) + "|" + name if name else id

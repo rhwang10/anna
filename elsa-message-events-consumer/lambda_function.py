@@ -12,7 +12,7 @@ class DynamoClient:
     def check_metadata(self, pk, sk):
         response = self.table.query(
             KeyConditionExpression=Key('emoji_id|emoji_name').eq(pk) \
-            & Key('author_name|timestamp').eq(sk)
+            & Key('author_id|timestamp').eq(sk)
         )
 
         return response["Items"][0] if response["Items"] else None
@@ -25,7 +25,7 @@ class DynamoClient:
         return self.table.update_item(
             Key={
                 "emoji_id|emoji_name": item["emoji_id|emoji_name"],
-                "author_name|timestamp": item["author_name|timestamp"]
+                "author_id|timestamp": item["author_id|timestamp"]
             },
             UpdateExpression='SET #ts = :ts, #c = #c + :ct',
             ExpressionAttributeValues={
@@ -54,14 +54,14 @@ def lambda_handler(event, context):
 
     # Emoji partition key emoji_id|emoji_name
 
-    pk, sk = key(emoji_id, emoji_name), key(author_name, timestamp)
+    pk, sk = key(emoji_id, emoji_name), key(author_id, timestamp)
 
     metadata_sk = key("METADATA", "")
 
     record = {
         "emoji_id|emoji_name": pk,
-        "author_name|timestamp": sk,
-        "author_id": author_id,
+        "author_id|timestamp": sk,
+        "author_name": author_name,
         "channel": channel,
         "voice_channel": voice_channel,
         "timestamp": timestamp
@@ -81,7 +81,7 @@ def lambda_handler(event, context):
 
         metadata_record = {
             "emoji_id|emoji_name": pk,
-            "author_name|timestamp": metadata_sk,
+            "author_id|timestamp": metadata_sk,
             "timestamp": timestamp,
             "count": 1
         }

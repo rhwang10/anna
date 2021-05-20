@@ -3,32 +3,29 @@ import boto3
 
 from boto3.dynamodb.conditions import Key
 
-class MessageEvents:
+class DynamoClient:
 
     def __init__(self):
         dynamo = boto3.resource('dynamodb')
-        self.table = dynamo.Table("elsa-message-events")
+        self.table = dynamo.Table("elsa-emoji-events")
 
-    def get(self, author_id, word):
+    def check_metadata(self, pk, sk):
         response = self.table.query(
-            KeyConditionExpression=Key('authorId').eq(author_id) & Key('word').eq(word)
+            KeyConditionExpression=Key('emoji_id|emoji_name').eq(pk) \
+            & Key('author_name|timestamp').eq(sk)
         )
 
-        # Returns the first match, which should be the only match
-        # since authorId + word should be a unique composite key
         return response["Items"][0] if response["Items"] else None
 
+
     def put(self, item):
-        response = self.table.put_item(
-            Item=item
-        )
-        return response
+        return self.table.put_item(Item=item)
 
     def update(self, item, latest_timestamp):
-        response = self.table.update_item(
+        return self.table.update_item(
             Key={
-                "authorId": item["authorId"],
-                "word": item["word"]
+                "emoji_id|emoji_name": item["emoji_id|emoji_name"],
+                "author_name|timestamp": item["author_name|timestamp"]
             },
             UpdateExpression='SET #ts = :ts, #c = #c + :ct',
             ExpressionAttributeValues={
@@ -41,40 +38,61 @@ class MessageEvents:
             }
         )
 
-message_events = MessageEvents()
+dynamo_client = DynamoClient()
 
 def lambda_handler(event, context):
 
     message_body = json.loads(event["Records"][0]["body"])
 
-    words = message_body["message"].split(" ")
     author_id = message_body["authorId"]
+    author_name = message_body["authorName"]
+    emoji_id = message_body["emojiId"]
+    emoji_name = message_body["emojiName"]
     timestamp = message_body["timestamp"]
-    message_id = message_body["messageId"]
+    channel = message_body["channel"]
+    voice_channel = message_body["voiceChannel"]
 
-    # Update count for each word
-    for word in words:
+    # Emoji partition key emoji_id|emoji_name
 
-        r = message_events.get(author_id, word)
+    pk, sk = key(emoji_id, emoji_name), key(author_name, timestamp)
 
-        # Update if record exists
-        if r:
-            message_events.update(r, timestamp)
-            print(f"Record for authorId {author_id} and word {word} updated successfully")
+    metadata_sk = key("METADATA", "")
 
-        # Otherwise, insert
-        else:
-            item = {
-                "authorId": author_id,
-                "word": word,
-                "timestamp": timestamp,
-                "message_id": message_id,
-                "count": 1
-            }
+    record = {
+        "emoji_id|emoji_name": pk,
+        "author_name|timestamp": sk,
+        "author_id": author_id,
+        "channel": channel,
+        "voice_channel": voice_channel,
+        "timestamp": timestamp
+    }
 
-            message_events.put(item)
-            print(f"Record for authorId {author_id} and word {word} created successfully")
+    # put the record
+    dynamo_client.put(record)
+
+    r = dynamo_client.check_metadata(pk, metadata_sk)
+
+    if r:
+
+        dynamo_client.update(r, timestamp)
+        print(f"Metadata record for emoji ID {emoji_id} | emoji name {emoji_name} updated successfully")
+
+    else:
+
+        metadata_record = {
+            "emoji_id|emoji_name": pk,
+            "author_name|timestamp": metadata_sk,
+            "timestamp": timestamp,
+            "count": 1
+        }
+
+        dynamo_client.put(metadata_record)
+        print(f"Metadata record created for emoji ID {emoji_id} | emoji name {emoji_name}")
+
 
     return {
         'statusCode': 200
     }
+
+def key(id, name):
+    return id + "|" + name if name else id
